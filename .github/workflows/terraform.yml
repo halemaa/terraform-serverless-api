@@ -1,0 +1,108 @@
+# .github/workflows/terraform.yml
+#
+# CI/CD for the infrastructure. Two jobs:
+#
+#   validate  — runs on EVERY push and pull request. Needs NO AWS credentials.
+#               Checks formatting, downloads providers, and validates the code.
+#               This is the safety net that stops broken Terraform merging.
+#
+#   plan-apply — runs the real thing against AWS. "plan" previews changes;
+#               "apply" only runs when YOU trigger it manually (workflow_dispatch),
+#               so infrastructure is never changed by accident on a push.
+#
+# To enable the AWS jobs, add two repository secrets under
+# Settings -> Secrets and variables -> Actions:
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+# (Better long term: use GitHub OIDC to assume a role with no stored keys.)
+
+name: Terraform
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Choose plan or apply"
+        required: true
+        default: "plan"
+        type: choice
+        options: [plan, apply]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: terraform
+
+jobs:
+  # ---------------------------------------------------------------
+  # Always runs. No credentials required. Fast feedback on every PR.
+  # ---------------------------------------------------------------
+  validate:
+    name: Format & validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+
+      - name: Initialise (no backend, no cloud calls)
+        run: terraform init -backend=false
+
+      - name: Validate configuration
+        run: terraform validate
+
+  # ---------------------------------------------------------------
+  # Talks to AWS. plan on push to main; apply only on manual dispatch.
+  # Skipped automatically if AWS secrets are not configured.
+  # ---------------------------------------------------------------
+  plan-apply:
+    name: Plan / Apply
+    needs: validate
+    runs-on: ubuntu-latest
+    # Only attempt cloud steps when credentials exist.
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: eu-west-1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — are AWS credentials present?
+        id: guard
+        run: |
+          if [ -z "$AWS_ACCESS_KEY_ID" ]; then
+            echo "has_creds=false" >> "$GITHUB_OUTPUT"
+            echo "No AWS credentials set — skipping cloud steps. (Add repo secrets to enable.)"
+          else
+            echo "has_creds=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Terraform
+        if: steps.guard.outputs.has_creds == 'true'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform init
+        if: steps.guard.outputs.has_creds == 'true'
+        run: terraform init
+
+      - name: Terraform plan
+        if: steps.guard.outputs.has_creds == 'true'
+        run: terraform plan -no-color -input=false
+
+      - name: Terraform apply
+        if: steps.guard.outputs.has_creds == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+        run: terraform apply -no-color -input=false -auto-approve

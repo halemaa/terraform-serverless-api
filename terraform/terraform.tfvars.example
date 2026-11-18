@@ -1,0 +1,10 @@
+# terraform.tfvars.example
+# Copy this file to "terraform.tfvars" and change values if you want to
+# override the defaults. terraform.tfvars is gitignored so your settings
+# stay local.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+
+aws_region   = "eu-west-1"
+project_name = "serverless-items-api"
+environment  = "dev"

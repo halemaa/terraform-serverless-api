@@ -1,0 +1,22 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars          # keep local settings & any secrets out of git
+!*.tfvars.example # but DO track the example
+override.tf
+override.tf.json
+
+# Build artifact (the zipped Lambda, rebuilt on every plan/apply)
+terraform/build/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

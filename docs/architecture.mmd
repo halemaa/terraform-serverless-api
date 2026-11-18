@@ -1,0 +1,22 @@
+%% Architecture of the serverless items API
+%% Render locally with:  mmdc -i architecture.mmd -o architecture.png
+flowchart LR
+    user([Client / Browser]):::ext
+
+    subgraph AWS["AWS Cloud — region eu-west-1"]
+        apigw["API Gateway<br/>(HTTP API)<br/><i>the front desk</i>"]:::aws
+        lambda["Lambda<br/>handler.py<br/><i>the taxi driver</i>"]:::aws
+        ddb[("DynamoDB<br/>items table<br/><i>the filing cabinet</i>")]:::db
+        logs["CloudWatch Logs<br/><i>audit trail</i>"]:::log
+    end
+
+    user -->|"HTTPS<br/>GET / POST / DELETE"| apigw
+    apigw -->|"AWS_PROXY<br/>invoke"| lambda
+    lambda -->|"GetItem / PutItem<br/>Scan / DeleteItem"| ddb
+    lambda -.->|"writes logs"| logs
+    apigw -.->|"access logs"| logs
+
+    classDef aws fill:#ec912d,stroke:#b36a10,color:#1a1a1a,font-weight:bold;
+    classDef db fill:#4053d6,stroke:#2a3a9c,color:#ffffff,font-weight:bold;
+    classDef log fill:#7a6fb0,stroke:#574d8a,color:#ffffff;
+    classDef ext fill:#f2ede4,stroke:#8a8178,color:#1a1a1a;
